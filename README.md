@@ -173,6 +173,56 @@ Here is a brief system design of OpenAgents:
     <img src="pics/system_design.png"/>
 </div>
 
+### Integrated Summary
+
+This repository implements OpenAgents — an open platform for building, hosting, and interacting with language-based agents. It contains a full-stack demo with three production-style agents and the supporting server, UI, and adapters needed to run them locally or in Docker:
+
+- **Backend (`backend/`)**: A Flask server exposing chat endpoints (`/api/chat`, `/api/chat_xlang_plugin`, `/api/chat_xlang_webot`) that initialize agent executors, manage memory and message streams, and orchestrate calls to LLMs, plugins, code execution sandboxes, and the Webot extension. Key files: `backend/app.py`, `backend/main.py`, and the chat routes under `backend/api/`.
+- **Frontend (`frontend/`)**: A Next.js + React UI (plus a Chrome extension bundle) providing chat interfaces, agent controls, and streaming UI. Key areas: `frontend/pages/`, `frontend/components/Chat/`, and `webot_extension.zip` for the Web Agent.
+- **Real agents (`real_agents/`)**: Implementations of the three agent types and reusable adapters:
+    - `data_agent/` — data analysis agent (Python/SQL code generation & execution, ECharts, Kaggle loader).
+    - `plugins_agent/` — integrates third‑party plugins and supports auto plugin selection.
+    - `web_agent/` — browser automation agent that works with the `Webot` Chrome extension.
+    - `adapters/` — shared LLM adapters, agent initialization, memory, data models, and executors.
+- **Infra and tooling**: The project supports Redis (transient state, webot state), MongoDB (persistent conversations & users), multiple LLM backends (OpenAI / Anthropic / hosted LLMs), and optional Docker-based code execution sandboxes for safe Python execution.
+
+How a request typically flows: frontend → backend endpoint → executor (Data / Plugins / Web) → tools (LLM, plugins, code exec, Webot) → backend aggregates & streams results back to the frontend. A compact flowchart follows.
+
+### Short Call Flow
+
+Below is a concise call-flow showing how a typical chat request moves through the system. The diagram is intentionally compact — it captures the main HTTP/streaming path, the agent executor dispatch, and the common tool/infra interactions.
+
+```mermaid
+flowchart LR
+    F[Frontend UI (Next.js)] -->|POST /api/chat or /api/chat_xlang_*| B[Backend (Flask)]
+    B -->|builds executor| E{Agent Type}
+    E --> DA[Data Agent Executor]
+    E --> PA[Plugins Agent Executor]
+    E --> WA[Web Agent / Webot Executor]
+    DA -->|calls| LLM[LLM (OpenAI / Anthropic / Hosted)]
+    PA -->|calls| Plugins[Third‑party Plugins / APIs]
+    WA -->|controls| ChromeExt[Webot Chrome Extension]
+    DA -->|may execute code| CodeExec[Code Execution (local / docker)]
+    B -->|cache & session| Redis[Redis]
+    B -->|persist chat & user data| Mongo[MongoDB]
+    LLM -->|response| B
+    Plugins -->|response| B
+    ChromeExt -->|events / actions| B
+    CodeExec -->|output| B
+    B -->|stream response| F
+```
+
+- Frontend sends chat requests to the backend endpoints (e.g., `POST /api/chat`, `POST /api/chat_xlang_plugin`, `POST /api/chat_xlang_webot`).
+- Backend initializes or loads an agent executor (via `real_agents/adapters/interactive_executor.py`) and its memory, then runs the agent.
+- The agent may call an LLM, third‑party plugins, execute code (sandboxed local/docker), or control the Webot Chrome extension depending on the agent type.
+- Redis is used for transient state (cache, webot state); MongoDB is used for persistent storage (users, conversations, messages).
+- Responses are streamed back to the frontend for low-latency updates and richer interactive behavior.
+
+<div align="center">
+    <img src="pics/call_flow.svg" alt="OpenAgents call flow diagram" width="900" />
+</div>
+
+
 ### From Source Code
 
 Please check the following folders and README files to set up & localhost:
